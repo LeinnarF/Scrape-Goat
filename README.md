@@ -1,148 +1,90 @@
-# Image Scraper Project
+# Scrape Goat: Image and Description Scraper
 
-A Python-based image scraping tool that downloads images from DuckDuckGo search results for Points of Interest (POI) in Bulacan, Philippines.
+A collection of Jupyter notebooks for scraping Bulacan Points of Interest (POI) images with DuckDuckGo, tracking download health, and drafting textual descriptions.
 
 ## Overview
 
-This project scrapes images for various tourist attractions, historical sites, natural landmarks, and cultural heritage locations in Bulacan province. It uses the DuckDuckGo search engine API to find and download images based on location data from a CSV file.
+The workflow pulls POI names and municipalities from [data/poi.csv](data/poi.csv), generates search terms, and downloads multiple images per location via DuckDuckGo. Supplementary notebooks validate image integrity and summarize web content related to each POI.
 
 ## Project Structure
 
 ```
 .
-├── scraper.ipynb          # Main image scraping notebook
-├── notebook.ipynb         # Basic scraping examples and tests
-├── diagnosis.ipynb        # Image validation and cleanup utilities
-├── poi.csv               # Points of Interest data (name, municipality, coordinates, etc.)
-├── downloaded_images/    # Storage for scraped images
-├── test_images/          # Storage for test images
+├── image-scraper.ipynb      # Bulk image scraping pipeline
+├── notebook.ipynb           # Exploratory scraping examples
+├── diagnostic.ipynb         # Download counting and integrity checks
+├── description-scraper.ipynb# POI description drafting
+├── data/
+│   ├── poi.csv
+│   └── poi_backup.csv
+├── downloaded_images/
+├── test_images/
 └── README.md
 ```
 
 ## Features
 
-- **Automated Image Scraping**: Downloads multiple images per search query using DuckDuckGo
-- **CSV-based Input**: Reads POI data from `poi.csv` containing locations in Bulacan
-- **Smart Filtering**: Automatically skips WebP images to ensure compatibility
-- **Error Handling**: Gracefully handles download failures and timeouts
-- **Image Validation**: Includes utilities to detect and remove corrupted images
-- **Progress Tracking**: Real-time progress updates during bulk downloads
+- **Automated Image Scraping**: [`download_images`](image-scraper.ipynb) fetches up to 10 results per query.
+- **CSV-driven Queries**: [`generate_search_queries`](image-scraper.ipynb) builds `"POI in Municipality Bulacan"` prompts from POI data.
+- **Progress Feedback**: Looping logic in [image-scraper.ipynb](image-scraper.ipynb) surfaces per-query status updates.
+- **Broken Image Detection**: [diagnostic.ipynb](diagnostic.ipynb) verifies downloads and deletes corrupt files with Pillow.
+- **Description Summaries**: [`search_and_summarize`](description-scraper.ipynb) blends DuckDuckGo snippets and Transformer summarization.
 
 ## Requirements
 
-Install dependencies using:
+Install core dependencies:
 
 ```sh
 pip install requests ddgs pandas Pillow
 ```
 
-### Key Dependencies
+Optional NLP tooling for [description-scraper.ipynb](description-scraper.ipynb):
 
-- `requests` - HTTP library for downloading images
-- `ddgs` - DuckDuckGo search API wrapper
-- `pandas` - Data manipulation for CSV processing
-- `Pillow` - Image validation and processing
+```sh
+pip install transformers torch
+```
 
 ## Usage
 
-### Basic Image Download
-
-Use the `download_images` function from `scraper.ipynb`:
+### Bulk Image Download
 
 ```python
 from ddgs import DDGS
-import requests
-import os
+import pandas as pd
 
-download_images("Mt. Balagbag in San Jose Del Monte Bulacan", max_results=10)
-```
-
-### Batch Processing POI Data
-
-The scraper reads from `poi.csv` and generates search queries automatically:
-
-```python
-# Load POI data
-df = pd.read_csv('poi.csv')
+# Prepare search phrases
+df = pd.read_csv("data/poi.csv")[["name", "municipality"]]
+df_dict = df.to_dict(orient="records")
 search_queries = generate_search_queries(df_dict)
 
-# Download images for all POIs
+# Download images
 for query in search_queries:
-    download_images(query, 10)
+    download_images(query, max_results=10)
 ```
 
-### Image Validation
+### Validate Downloads
 
-Use `diagnosis.ipynb` to check and clean downloaded images:
+[diagnostic.ipynb](diagnostic.ipynb) counts files, flags corrupted images with Pillow, and removes them automatically.
+
+### Draft POI Summaries
 
 ```python
-# Check for broken images
-from PIL import Image
-
-broken_images = []
-for img_name in os.listdir('downloaded_images/'):
-    try:
-        img = Image.open(img_path)
-        img.verify()
-    except (IOError, SyntaxError):
-        broken_images.append(img_name)
-
-# Remove broken images
-for img_name in broken_images:
-    os.remove(os.path.join('downloaded_images/', img_name))
+summary = search_and_summarize("Mt. Balagbag in San Jose Del Monte Bulacan", max_results=5)
+print(summary)
 ```
 
 ## Data Format
 
-The `poi.csv` file contains POI information with the following key columns:
+Key columns in [data/poi.csv](data/poi.csv):
 
-- `name` - Name of the point of interest
-- `municipality` - Municipality where the POI is located
-- `longitude` & `latitude` - Geographic coordinates
-- `Type Code` - Category (NATURE, HISTORY AND CULTURE, SHOPPING)
-- `gmaps_rating` - Google Maps rating
-- `categories` - Additional categorization
-
-## Notebooks
-
-### scraper.ipynb
-Main scraping notebook with full implementation of the image downloader. Processes all 94 POIs from the CSV file.
-
-### notebook.ipynb
-Contains basic examples and test cases for scraping functionality, including simple queries and small-scale downloads.
-
-### diagnosis.ipynb
-Utility notebook for validating downloaded images, detecting corrupted files, and cleaning up the image directory.
-
-## Statistics
-
-- **Total POIs**: 94 locations
-- **Images per POI**: Up to 10
-- **Potential Downloads**: ~940 images
-- **Estimated Size**: ~459 MB
-
-## Image Filtering
-
-The scraper automatically filters out:
-- WebP format images (by URL extension)
-- WebP format images (by Content-Type header)
-- Images that fail to download due to network errors
-- Images from forbidden or protected sources
-
-## Error Handling
-
-The scraper handles various errors gracefully:
-- Network timeouts (10-second timeout)
-- HTTP errors (403, 404, 460, etc.)
-- Invalid image files
-- Redirect loops
-
-## License
-
-This project is for educational and research purposes. Please respect copyright and terms of service of image sources.
+- `name` – POI name  
+- `municipality` – Municipality of the POI  
+- `longitude`, `latitude` – Coordinates  
+- `Type Code`, `categories` – Classification metadata  
+- `gmaps_rating` – Google Maps rating snapshot
 
 ## Notes
 
-- Images are saved with descriptive filenames: `{POI_name}_{municipality}_Bulacan_{index}.jpg`
-- The scraper includes progress tracking via `clear_output()` in Jupyter notebooks
-- Broken images can be detected and removed using the diagnosis utilities
+- Image files are saved as `{POI_name}_{municipality}_Bulacan_{index}.jpg`.
+- Broken downloads are reported and skipped; WebP references are ignored by URL and `Content-Type`.
+- `.gitignore` excludes downloaded image folders and CSV exports by default.
